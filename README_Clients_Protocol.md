@@ -17,7 +17,7 @@
 7. [Request Format](#7-request-format)
 8. [Response Format](#8-response-format)
 9. [Subscription Model](#9-subscription-model)
-10. [Subscription Push Wire Format](#10-subscription-push-wire-format)
+10. [Subscription Push Message Formats](#10-subscription-push-message-formats)
 11. [Record Status Codes](#11-record-status-codes)
 12. [Splitter Escaping](#12-splitter-escaping)
 13. [Heartbeat](#13-heartbeat)
@@ -33,7 +33,9 @@
 
 ## 1. Overview
 
-ThunderPropagator is a real-time data streaming platform. Clients connect to a server, request channel metadata, subscribe to data streams using key/field filters, and receive live push updates via a proprietary compact wire format.
+ThunderPropagator is a real-time data streaming platform. Clients connect to a server, request channel metadata, subscribe to data streams using key/field filters, and receive live push updates in one of the supported push message formats.
+
+Control-plane requests and responses may be encoded as `Json`, `Yaml`, or `Xml`. The default push message format is the ThunderPropagator fast serializer format. Servers may also expose additional push formats such as JSON, YAML, and XML, and clients must be able to request and parse any format they declare support for.
 
 The platform supports three transport protocols in priority order:
 
@@ -53,7 +55,7 @@ IDS is the backup protocol. **All clients must implement IDS** and must activate
 
 - **URL scheme:** `ws://` or `wss://`
 - **Path:** same root path as HTTP server (no subpath needed)
-- **Frame type:** Text frames only (UTF-8 JSON or proprietary wire format)
+- **Frame type:** Text frames only (UTF-8 structured request/response payloads and the negotiated push message format for subscription updates)
 - **Library examples:** native browser API, `ws` (Node.js), `websockets` (Python), `gorilla/websocket` (Go), `tungstenite` (Rust), `URLSessionWebSocketTask` (Swift)
 
 ### 2.2 QUIC
@@ -70,16 +72,23 @@ IDS is a pure HTTP/1.1 streaming protocol. It uses two separate HTTP operations:
 
 ```
 POST /thunderPropagator/{channelName}/subscribe
-Content-Type: application/json
+Content-Type: depends on negotiated request format:
+  - `application/json; charset=utf-8` for `Json`
+  - `application/yaml; charset=utf-8` for `Yaml`
+  - `application/xml; charset=utf-8` for `Xml`
 Body: { ...SubscribeRequest }
 
 Response: 200 OK
-Content-Type: text/plain; charset=utf-8
+Content-Type: depends on negotiated push message format:
+  - `text/plain; charset=utf-8` for `FastSerializer`
+  - `application/x-ndjson; charset=utf-8` for `Json`
+  - `application/yaml; charset=utf-8` for `Yaml`
+  - `application/xml; charset=utf-8` for `Xml`
 Transfer-Encoding: chunked
 [newline-delimited messages stream indefinitely until client disconnects]
 ```
 
-Each message is a single line terminated by `\n`. The client reads lines indefinitely from the response body.
+Each message is a single line terminated by `\n`. The client reads lines indefinitely from the response body and parses each line using the negotiated push message format.
 
 > **Note:** The channel can also be addressed by its `Guid` key:
 > `POST /thunderPropagator/{channelKey:guid}/subscribe`
@@ -88,9 +97,12 @@ Each message is a single line terminated by `\n`. The client reads lines indefin
 
 ```
 GET /channel/{channelName}/metadata
-Accept: application/json
-Response: 200 OK, Content-Type: application/json
-Body: { ChannelMetadata JSON }
+Accept: depends on negotiated request/response format:
+  - `application/json` for `Json`
+  - `application/yaml` for `Yaml`
+  - `application/xml` for `Xml`
+Response: 200 OK, Content-Type: same as negotiated request/response format
+Body: ChannelMetadata in the negotiated structured format
 ```
 
 ---
@@ -165,21 +177,31 @@ Upgrade is seamless — subscriptions are silently re-applied over the new proto
 {
   "ConnectionId": "550e8400-e29b-41d4-a716-446655440000",
   "IsAvailable": true,
+  "RequestResponseConfiguration": {
+    "MessageFormat": "Json",
+    "SupportedMessageFormats": ["Json", "Yaml", "Xml"]
+  },
   "PushMessageConfiguration": {
-    "MaxPushSize": 65536
+    "MaxPushSize": 65536,
+    "MessageFormat": "FastSerializer",
+    "SupportedMessageFormats": ["FastSerializer", "Json", "Yaml", "Xml"]
   }
 }
 ```
 
 - `ConnectionId` — opaque string; must be stored and included in all subsequent requests.
 - `IsAvailable` — if `false`, the server is at capacity; client should disconnect and retry.
+- `RequestResponseConfiguration.MessageFormat` — the effective structured format for requests, responses, and metadata payloads after the bootstrap handshake.
+- `RequestResponseConfiguration.SupportedMessageFormats` — the structured formats the server accepts for requests and emits for responses.
 - `PushMessageConfiguration.MaxPushSize` — maximum bytes the server will send in a single push chunk. The client uses this for buffer sizing.
+- `PushMessageConfiguration.MessageFormat` — the effective push message format for this connection. Clients must use this value when decoding subscription updates.
+- `PushMessageConfiguration.SupportedMessageFormats` — the formats the server can emit on this connection.
 
 3. The client **must ignore** any message that starts with `PROBE`. These are server-side liveness probes.
 
 4. All subsequent messages from the server are either:
-   - **Response messages** (JSON, in response to a client request)
-   - **Push messages** (proprietary wire format, unsolicited from feeder channels)
+  - **Response messages** (in the negotiated structured message format, in response to a client request)
+  - **Push messages** (emitted in the negotiated push message format, unsolicited from feeder channels)
 
 ### 4.2 IDS handshake
 
@@ -223,6 +245,28 @@ Credentials are RSA-encrypted using the server's public key before transmission.
 3. Encrypt credentials using the provided RSA public key and key size.
 4. Include encrypted values in all subsequent subscription requests.
 
+### 5.4 Push message format negotiation
+
+Push message format is negotiated per subscription. Clients request a preferred format in the subscribe request, and the server either accepts it or falls back to `FastSerializer`.
+
+Rules:
+1. Every client **must** support `FastSerializer`.
+2. Clients **should** support `Json`.
+3. Clients **may** support `Yaml` and `Xml` when their target platform benefits from human-readable or schema-oriented payloads.
+4. If the requested format is unavailable, the server must use `FastSerializer`.
+5. The effective format is reported in `PushMessageConfiguration.MessageFormat` and applies to every push message for that subscription/connection.
+
+### 5.5 Request/response message format negotiation
+
+Structured control-plane payloads use a separate negotiated format from push payloads.
+
+Rules:
+1. Requests, responses, and metadata payloads must support `Json`.
+2. Servers may additionally support `Yaml` and `Xml`.
+3. `FastSerializer` must not be used for requests, responses, or metadata.
+4. Clients choose a preferred structured format via configuration and HTTP headers where applicable.
+5. The effective structured format is reported in `RequestResponseConfiguration.MessageFormat`.
+
 ---
 
 ## 6. Channel Metadata
@@ -231,16 +275,19 @@ Before subscribing, the client must request channel metadata. Metadata describes
 
 ### 6.1 Via WebSocket / QUIC
 
-Send a `MetadataRequest` (see §7). The server responds with a standard `Response` (see §8) where `ResponseContent` contains the `Metadata` JSON object.
+Send a `MetadataRequest` (see §7). The server responds with a standard `Response` (see §8) where `ResponseContent` contains the `Metadata` payload in the negotiated structured format.
 
 ### 6.2 Via IDS
 
 ```
 GET /channel/{channelName}/metadata
-Accept: application/json
+Accept: depends on negotiated request/response format:
+  - `application/json` for `Json`
+  - `application/yaml` for `Yaml`
+  - `application/xml` for `Xml`
 ```
 
-Response body is the raw `ChannelMetadata` JSON.
+Response body is the raw `ChannelMetadata` payload in the negotiated structured format.
 
 ### 6.3 Metadata structure
 
@@ -265,13 +312,15 @@ Response body is the raw `ChannelMetadata` JSON.
 **Key fields:**
 - `ChannelProgramsDescriptors` — maps field indices (integers as strings) to field definitions.
 - `IsSubscribingKey: true` — this field is used as a subscription key (filter).
-- `Index` — the integer index used in push wire format values (see §10).
+- `Index` — the integer index used in `FastSerializer` push values (see §10).
 
 ---
 
 ## 7. Request Format
 
-All requests sent by the client (WebSocket and QUIC only; IDS uses HTTP) are JSON-serialized with the following base structure:
+All requests sent by the client (WebSocket and QUIC only; IDS uses HTTP) use the negotiated structured message format. Supported values are `Json`, `Yaml`, and `Xml`. `FastSerializer` is not valid for requests.
+
+The logical request shape is:
 
 ```json
 {
@@ -284,6 +333,48 @@ All requests sent by the client (WebSocket and QUIC only; IDS uses HTTP) are JSO
   "Username": null,
   "Password": null
 }
+```
+
+JSON example:
+
+```json
+{
+  "RequestId": "c3d4e5f6-a7b8-...",
+  "Route": {
+    "Channel": "Clock",
+    "RequestType": "Metadata"
+  },
+  "Token": null,
+  "Username": null,
+  "Password": null
+}
+```
+
+YAML example:
+
+```yaml
+RequestId: c3d4e5f6-a7b8-...
+Route:
+  Channel: Clock
+  RequestType: Metadata
+Token: null
+Username: null
+Password: null
+```
+
+XML example:
+
+```xml
+<Request>
+  <RequestId>c3d4e5f6-a7b8-...</RequestId>
+  <Route>
+    <Channel>Clock</Channel>
+    <RequestType>Metadata</RequestType>
+  </Route>
+  <Token />
+  <Username />
+  <Password />
+</Request>
 ```
 
 ### 7.1 RequestId
@@ -319,6 +410,22 @@ A unique identifier (UUID v4) for this request. The server echoes it back in the
 - `SubscribingKeys` — array of key-value dictionaries. Each entry subscribes to one key combination.
 - `SubscribingFields` — array of field names to receive. Empty array = all fields.
 - `SubscriptionMode` — `"Full"` (all field values on every update) or `"Changes"` (only changed fields).
+- `PushMessageFormat` — preferred push message format. Supported values: `"FastSerializer"`, `"Json"`, `"Yaml"`, `"Xml"`. If omitted, the default is `"FastSerializer"`.
+
+Example:
+
+```json
+{
+  "RequestId": "...",
+  "Route": { "Channel": "Clock", "RequestType": "Subscribe" },
+  "SubscribingKeys": [{ "UserId": "alice" }],
+  "SubscribingFields": ["Date", "Time"],
+  "SubscriptionMode": "Full",
+  "PushMessageFormat": "Json"
+}
+```
+
+The same logical subscribe payload may also be encoded as YAML or XML when the negotiated structured format is `Yaml` or `Xml`.
 
 ### 7.5 Unsubscribe request (additional fields)
 
@@ -338,7 +445,9 @@ Channels may expose custom `RequestType` values via receive pipelines (e.g., `"U
 
 ## 8. Response Format
 
-The server sends responses as JSON:
+The server sends responses using the negotiated structured message format. Supported values are `Json`, `Yaml`, and `Xml`. `FastSerializer` is not valid for responses.
+
+The logical response shape is:
 
 ```json
 {
@@ -353,10 +462,11 @@ The server sends responses as JSON:
 }
 ```
 
+- JSON, YAML, and XML responses carry the same logical fields.
 - `ResponseCode` — HTTP-style status code (200 OK, 400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found, etc.).
-- `ResponseContent` — JSON string or plain string payload; meaning depends on `RequestType`.
-- For `Metadata` requests, `ResponseContent` is a JSON string: `{ "Metadata": { ...ChannelMetadata... } }`.
-- For `Ping` requests, `ResponseContent` is a JSON object with server info.
+- `ResponseContent` — structured payload or plain string payload; meaning depends on `RequestType`.
+- For `Metadata` requests, `ResponseContent` contains the metadata payload in the negotiated structured format.
+- For `Ping` requests, `ResponseContent` contains server info in the negotiated structured format.
 - For `Subscribe` / `Unsubscribe`, `ResponseContent` is `"Subscribed"` or `"Unsubscribed"`.
 
 ---
@@ -391,17 +501,32 @@ States: Initiated → Subscribing → Subscribed → Unsubscribing → Unsubscri
 
 ---
 
-## 10. Subscription Push Wire Format
+## 10. Subscription Push Message Formats
 
-This is the **proprietary compact text format** the server uses to push subscription updates to clients. It is transport-agnostic — identical whether received over WebSocket, QUIC, or IDS.
+Push messages are transport-agnostic — identical whether received over WebSocket, QUIC, or IDS. The format is selected during subscription creation.
 
-### 10.1 Format
+### 10.1 Supported formats
+
+All clients **must** support the following baseline push message format:
+
+| Format | Required | Description |
+|--------|----------|-------------|
+| `FastSerializer` | Yes | Proprietary compact text format optimized for throughput and payload size |
+| `Json` | Recommended | Line-delimited JSON payloads optimized for interoperability and debugging |
+| `Yaml` | Optional | Line-delimited YAML payloads optimized for human readability and configuration-style consumers |
+| `Xml` | Optional | Line-delimited XML payloads optimized for schema-driven and enterprise integrations |
+
+If a client requests an unsupported format, the server falls back to `FastSerializer`.
+
+### 10.2 FastSerializer format
+
+This is the existing ThunderPropagator compact text format.
 
 ```
 {requestId},{fromSnapshot},{recordStatus},{key1|key2|...},{index=value;index=value;...}
 ```
 
-### 10.2 Fields
+### 10.3 FastSerializer fields
 
 | Position | Name | Type | Description |
 |----------|------|------|-------------|
@@ -411,7 +536,7 @@ This is the **proprietary compact text format** the server uses to push subscrip
 | 4 | `keys` | pipe-separated strings | Subscription key values in the same order as the subscribing keys |
 | 5 | `values` | semicolon-separated `index=value` pairs | Field values keyed by their descriptor index (integer from ChannelProgramsDescriptors) |
 
-### 10.3 Parsing regex
+### 10.4 FastSerializer parsing regex
 
 ```
 ^(.+?),(.+?),(.+?),(.+?),(.*)$
@@ -424,7 +549,7 @@ Groups:
 - `[4]` = pipe-separated keys
 - `[5]` = semicolon-separated index=value pairs
 
-### 10.4 Parsing values (group 5)
+### 10.5 FastSerializer parsing values (group 5)
 
 Split group 5 by `;`, then split each part by `=`:
 
@@ -434,7 +559,7 @@ Split group 5 by `;`, then split each part by `=`:
 
 Map integer indices to field names using `ChannelProgramsDescriptors`.
 
-### 10.5 Example
+### 10.6 FastSerializer example
 
 ```
 sub-req-uuid-1234,0,M,alice,1=2026-05-10;2=14:30:00.123
@@ -446,6 +571,78 @@ Decoded:
 - `recordStatus` = `M` (Modified)
 - `keys` = `["alice"]`
 - `values` = `{ "Date": "2026-05-10", "Time": "14:30:00.123" }`
+
+### 10.7 Json format
+
+When `PushMessageFormat` is `Json`, each pushed line is a single JSON object with the following shape:
+
+```json
+{
+  "RequestId": "sub-req-uuid-1234",
+  "FromSnapshot": false,
+  "RecordStatus": "M",
+  "Keys": ["alice"],
+  "Values": {
+    "Date": "2026-05-10",
+    "Time": "14:30:00.123"
+  }
+}
+```
+
+Rules:
+- `RequestId` maps to the original subscribe request.
+- `FromSnapshot` is a boolean.
+- `RecordStatus` uses the same codes defined in §11.
+- `Keys` preserves the subscribing-key order defined by the channel metadata.
+- `Values` uses field names, not descriptor indices.
+- Each JSON object is newline-delimited when transported over IDS.
+
+### 10.8 Yaml format
+
+When `PushMessageFormat` is `Yaml`, each pushed line is a single YAML document with the following shape:
+
+```yaml
+RequestId: sub-req-uuid-1234
+FromSnapshot: false
+RecordStatus: M
+Keys:
+  - alice
+Values:
+  Date: 2026-05-10
+  Time: "14:30:00.123"
+```
+
+Rules:
+- `Yaml` carries the same logical fields as `Json`.
+- Field names are case-sensitive and must match the JSON property names exactly.
+- Each YAML document is newline-delimited when transported over IDS.
+- Clients must use a safe YAML parser and must not permit custom tags or object instantiation.
+
+### 10.9 Xml format
+
+When `PushMessageFormat` is `Xml`, each pushed line is a single XML document with the following shape:
+
+```xml
+<PushMessage>
+  <RequestId>sub-req-uuid-1234</RequestId>
+  <FromSnapshot>false</FromSnapshot>
+  <RecordStatus>M</RecordStatus>
+  <Keys>
+    <Key>alice</Key>
+  </Keys>
+  <Values>
+    <Date>2026-05-10</Date>
+    <Time>14:30:00.123</Time>
+  </Values>
+</PushMessage>
+```
+
+Rules:
+- `Xml` carries the same logical fields as `Json`.
+- The root element must be `PushMessage`.
+- Repeated key values must be emitted as `<Key>` child elements under `<Keys>`.
+- Values are emitted using field names as XML element names under `<Values>`.
+- Each XML document is newline-delimited when transported over IDS.
 
 ---
 
@@ -462,7 +659,7 @@ Decoded:
 
 ## 12. Splitter Escaping
 
-The wire format uses `,`, `|`, and `;` as delimiters. If a **field value** contains any of these characters, the server replaces them with escape sequences before transmission. Clients **must** restore them after parsing.
+Splitter escaping applies only to the `FastSerializer` push message format. That format uses `,`, `|`, and `;` as delimiters. If a **field value** contains any of these characters, the server replaces them with escape sequences before transmission. Clients **must** restore them after parsing.
 
 | Escape Sequence | Original Character |
 |-----------------|--------------------|
@@ -538,6 +735,8 @@ All client libraries must expose the following configuration options with these 
 | `probeTimeoutMs` | int | `3000` | Timeout for protocol probe during negotiation |
 | `reconnectBaseDelayMs` | int | `1000` | Base delay for reconnection backoff |
 | `reconnectMaxDelayMs` | int | `60000` | Maximum reconnection delay |
+| `messageFormat` | string | `"Json"` | Preferred structured format for requests, responses, and metadata. Supported values: `"Json"`, `"Yaml"`, `"Xml"` |
+| `pushMessageFormat` | string | `"FastSerializer"` | Preferred push message format for subscriptions. Supported values: `"FastSerializer"`, `"Json"`, `"Yaml"`, `"Xml"` |
 | `auth` | object | `null` | Authentication — `{ type: "Bearer", token }` or `{ type: "Basic", username, password }` |
 | `backgroundBehaviour` | enum | `SwitchToIDS` | Mobile: what to do when app is backgrounded (`SwitchToIDS`, `Disconnect`, `KeepAlive`) |
 | `backgroundHeartbeatIntervalMs` | int | `60000` | Heartbeat interval when app is in background |
@@ -578,7 +777,7 @@ On network interface change, re-negotiate the protocol from scratch. Do not assu
 If `MessageEncryption.IsEnabled` is `true` in channel metadata:
 
 1. Read the encryption key and key size from `MessageEncryption` metadata.
-2. All received push messages are RSA-encrypted. Decrypt using the provided key before parsing the wire format (§10).
+2. All received push messages are RSA-encrypted. Decrypt using the provided key before parsing the negotiated push message format (§10).
 3. All authentication credentials are RSA-encrypted before transmission (§5.3).
 
 Clients that do not implement encryption must reject channels with `MessageEncryption.IsEnabled: true` and throw a `FeatureNotSupportedException`.
@@ -607,9 +806,9 @@ Clients that do not implement encryption must reject channels with `MessageEncry
 - **Protocol probe failure**: move to next protocol silently; log at `Debug` level.
 - **IDS body interrupted**: reconnect IDS immediately; re-apply subscriptions.
 
-### 18.3 Invalid wire format
+### 18.3 Invalid push message payload
 
-If a received push message does not match the regex in §10, the client must:
+If a received push message cannot be parsed according to the negotiated format in §10, the client must:
 1. Log the raw message at `Warning` level.
 2. Skip the message (do not crash the subscription).
 3. Increment a metric counter `thunderpropagator.receive.parse_errors_total`.
@@ -634,6 +833,7 @@ Every client library version must pass all of the following before release:
 
 ### Handshake
 - [ ] First message from server is parsed as `ConnectionResponse` JSON
+- [ ] `RequestResponseConfiguration.MessageFormat` stored and used for control-plane payload serialization
 - [ ] `PROBE` messages are silently ignored
 - [ ] `ConnectionId` stored and included in all requests
 - [ ] `IsAvailable: false` causes disconnection with retry
@@ -647,10 +847,12 @@ Every client library version must pass all of the following before release:
 ### Metadata
 - [ ] Channel metadata requested before first subscription
 - [ ] Metadata cached and reused for the session
-- [ ] `ChannelProgramsDescriptors` parsed and used for wire format decoding
+- [ ] `ChannelProgramsDescriptors` parsed and used for `FastSerializer` decoding
 
 ### Subscriptions
 - [ ] Subscribe request includes `SubscribingKeys`, `SubscribingFields`, `SubscriptionMode`
+- [ ] Subscribe request supports `PushMessageFormat`
+- [ ] Request payloads support `Json` and optionally `Yaml` / `Xml`
 - [ ] `RequestId` is a unique UUID v4 per request
 - [ ] Response correlated to request via `RequestId`
 - [ ] Snapshot messages (`FromSnapshot: true`) delivered to callbacks
@@ -658,15 +860,31 @@ Every client library version must pass all of the following before release:
 - [ ] `onTableUpdated` callback fires with table, key, items, status
 - [ ] Unsubscribe request sent on `unsubscribe()` call
 
-### Wire format
-- [ ] Push message regex `^(.+?),(.+?),(.+?),(.+?),(.*)$` applied correctly
-- [ ] `fromSnapshot` decoded as boolean (`"1"` = true)
-- [ ] `recordStatus` decoded as A/M/D/N enum
-- [ ] Keys split by `|`
-- [ ] Values split by `;` then by `=` as index=value pairs
-- [ ] Splitter escapes `<C>`, `<PI>`, `<SC>` restored after splitting
-- [ ] Field indices mapped to names via `ChannelProgramsDescriptors`
-- [ ] Invalid wire format logged and skipped (no crash)
+### Push message formats
+- [ ] `FastSerializer` supported
+- [ ] `Json` supported or explicitly declared unsupported for the platform/version
+- [ ] `Yaml` supported or explicitly declared unsupported for the platform/version
+- [ ] `Xml` supported or explicitly declared unsupported for the platform/version
+- [ ] Requested `PushMessageFormat` is sent during subscription creation
+- [ ] Effective push message format read from `PushMessageConfiguration.MessageFormat`
+- [ ] `FastSerializer` regex `^(.+?),(.+?),(.+?),(.+?),(.*)$` applied correctly
+- [ ] `FastSerializer` `fromSnapshot` decoded as boolean (`"1"` = true)
+- [ ] `FastSerializer` `recordStatus` decoded as A/M/D/N enum
+- [ ] `FastSerializer` keys split by `|`
+- [ ] `FastSerializer` values split by `;` then by `=` as index=value pairs
+- [ ] `FastSerializer` splitter escapes `<C>`, `<PI>`, `<SC>` restored after splitting
+- [ ] `FastSerializer` field indices mapped to names via `ChannelProgramsDescriptors`
+- [ ] `Json` payloads decoded with `RequestId`, `FromSnapshot`, `RecordStatus`, `Keys`, `Values`
+- [ ] `Yaml` payloads decoded with `RequestId`, `FromSnapshot`, `RecordStatus`, `Keys`, `Values`
+- [ ] `Xml` payloads decoded with `RequestId`, `FromSnapshot`, `RecordStatus`, `Keys`, `Values`
+- [ ] Invalid push payload logged and skipped (no crash)
+
+### Request/response formats
+- [ ] `Json` request/response payloads supported
+- [ ] `Yaml` request/response payloads supported or explicitly declared unsupported for the platform/version
+- [ ] `Xml` request/response payloads supported or explicitly declared unsupported for the platform/version
+- [ ] `FastSerializer` never used for requests/responses
+- [ ] Effective structured message format read from `RequestResponseConfiguration.MessageFormat`
 
 ### Heartbeat & reconnection
 - [ ] Ping sent every `heartbeatIntervalMs`
