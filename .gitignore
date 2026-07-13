@@ -1,1 +1,59 @@
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor and IDE state
+.idea/
+.fleet/
+.vscode/
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.swp
+*.swo
+*~
+
+# Local agent/tool state
 .claude/
+.codex/
+
+# Environment and local configuration
+.env
+.env.*
+*.local
+
+# Logs and diagnostics
+*.log
+logs/
+*.pid
+*.seed
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# Build and package output
+[Bb]in/
+[Oo]bj/
+build/
+dist/
+out/
+coverage/
+
+# Dependency caches
+node_modules/
+.npm/
+.yarn/
+.pnpm-store/
+
+# Archives and generated packages
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.nupkg
