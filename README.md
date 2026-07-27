@@ -1,76 +1,41 @@
 # ThunderPropagator.Clients
 
-ThunderPropagator Client Protocol Specification — shared wire format, protocols, options, and compliance checklist for all client libraries.
+## Innovating at the Edge of Tomorrow.
 
-> **This is the authoritative specification.** Every client — regardless of language or platform — must implement exactly this protocol. Deviations require an approved RFC against this repository.
+Authoritative ThunderPropagator client protocol specification covering wire formats, transports, authentication, subscriptions, failover, and compliance.
 
-Full specification: [`README_Clients_Protocol.md`](README_Clients_Protocol.md)
+Future-ready technology for a world where data needs to arrive at the right place at the right time and software capabilities need to be managed to maximize control and security.
 
----
+With ThunderPropagator, from stock and financial feeds to audio, news, video, and other content, it's all there fast enough to keep up with today's Internet. It provides bi-directional communication over advanced protocols and supports multiple message broker implementations. With LicenseManager, it makes it possible to protect, manage, and profit from your most valuable software development assets while innovating at the edge of tomorrow.
+
+## Key capabilities
+
+- **Repository standards:** documented implementation and contracts are available in the linked documentation area.
+- **Build automation:** documented implementation and contracts are available in the linked documentation area.
+- **Documentation:** documented implementation and contracts are available in the linked documentation area.
+
+## Technology
+
+Detected stacks: **Documentation**.
+
+This repository provides specifications or shared repository infrastructure and does not require a product build.
 
 ## Documentation
 
-This repository publishes generated documentation under [`/docs`](docs/README.md).
+Generated documentation is available from the [`/docs` landing page](docs/README.md). The catalog below is generated from the current documentation tree.
 
-- [Overview](docs/README.md#overview)
-- [Transport Layer](docs/README.md#transport-layer)
-- [Connection & Handshake](docs/README.md#connection--handshake)
-- [Authentication](docs/README.md#authentication)
-- [Format Negotiation](docs/README.md#format-negotiation)
-- [Subscriptions & Push Formats](docs/README.md#subscriptions--push-formats)
-- [Record Status Codes](docs/README.md#record-status-codes)
-- [Splitter Escaping](docs/README.md#splitter-escaping)
-- [Heartbeat](docs/README.md#heartbeat)
-- [Reconnection & Failover](docs/README.md#reconnection--failover)
-- [Configuration Reference](docs/README.md#configuration-reference)
-- [Mobile Lifecycle](docs/README.md#mobile-lifecycle)
-- [Encryption Support](docs/README.md#encryption-support)
-- [Error Handling](docs/README.md#error-handling)
-- [Client Library Status](docs/README.md#client-library-status)
-- [Diagrams](docs/README.md#diagrams)
+- [Documentation home](docs/README.md)
 
-### Docs Catalog
+**Last generated:** July 27, 2026
 
-- Protocol Specification `Files:1` `Diagrams:✓`
-  - [Transport & Negotiation](docs/README.md#transport-layer) `Diagrams:✓`
-  - [Connection & Handshake](docs/README.md#connection--handshake) `Diagrams:✓`
-  - [Authentication & Format Negotiation](docs/README.md#authentication) `Diagrams:✗`
-  - [Subscriptions & Push Formats](docs/README.md#subscriptions--push-formats) `Diagrams:✓`
-  - [Reconnection & Failover](docs/README.md#reconnection--failover) `Diagrams:✓`
-  - [Mobile Lifecycle](docs/README.md#mobile-lifecycle) `Diagrams:✗`
-  - [Error Handling](docs/README.md#error-handling) `Diagrams:✗`
+## Package sources
 
-**Last generated:** 2026-05-13
+No external package dependencies were detected from the supported manifests.
 
----
+## Repository map
 
-## Client Libraries
-
-| Language | Package | Repository | Status |
-|----------|---------|------------|--------|
-| .NET (C#) | `ThunderPropagator.Clients.DotNet` | [Clients.DotNet](https://github.com/KiarashMinoo/ThunderPropagator.Clients.DotNet) | ✅ Reference implementation |
-| JavaScript / TypeScript | `@thunderpropagator/client` | Clients.JS | 🔲 Planned |
-| Python | `thunderpropagator-client` | Clients.Python | 🔲 Planned |
-| Java | `com.thunderpropagator:client` | Clients.Java | 🔲 Planned |
-| Go | `github.com/KiarashMinoo/thunderpropagator-go` | Clients.Go | 🔲 Planned |
-| Rust | `thunderpropagator-client` | Clients.Rust | 🔲 Planned |
-| C++ | `thunderpropagator-cpp` | Clients.Cpp | 🔲 Planned |
-| Swift / Objective-C | SPM package | Clients.Swift | 🔲 Planned |
-| Flutter / Dart | `thunderpropagator_client` | Clients.Flutter | 🔲 Planned |
-
----
-
-## Contributing
-
-To propose changes to this specification:
-
-1. Open an issue describing the change and motivation.
-2. Wire-format–breaking changes require a major version bump.
-3. All client library maintainers must acknowledge before merging.
-4. After merge, client libraries have 30 days to implement and release the change.
-
----
+This repository is part of the broader ThunderPropagator and LicenseManager technology portfolio. Each repository owns a focused capability while shared protocols, build conventions, and documentation keep the ecosystem aligned.
 
 ## License
 
-[MIT](LICENSE) © 2026 Kiarash Minoo
+See [`LICENSE`](LICENSE) for the terms that apply to this repository.
