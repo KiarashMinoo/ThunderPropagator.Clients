@@ -10,9 +10,10 @@ With ThunderPropagator, from stock and financial feeds to audio, news, video, an
 
 ## Key capabilities
 
-- **Repository standards:** documented implementation and contracts are available in the linked documentation area.
-- **Build automation:** documented implementation and contracts are available in the linked documentation area.
-- **Documentation:** documented implementation and contracts are available in the linked documentation area.
+- **Transport negotiation:** selects WebSocket, QUIC, or IDS fallback while preserving a consistent client contract.
+- **Wire formats:** specifies interoperable requests, responses, metadata, and streaming message formats.
+- **Subscription resilience:** defines heartbeats, reconnection, failover, snapshots, and subscription recovery.
+- **Authentication and encryption:** covers bearer tokens, encrypted basic authentication, and secure channel behavior.
 
 ## Technology
 
