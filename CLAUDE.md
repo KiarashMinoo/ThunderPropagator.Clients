@@ -1,19 +1,17 @@
 # CLAUDE.md
 
-Guidance for working in this repository.
+## What This Repo Is
 
-## What this repo is
+A specification repo, not a code repo — no build system. Defines the wire protocol (transports, handshake, authentication, subscription model, push message formats, heartbeat/failover) every per-language client implementation must conform to, plus a compliance checklist.
 
-A specification repo, not a code repo — there is no build system here. It defines the wire protocol (transports, handshake, authentication, subscription model, push message formats, heartbeat/failover) that every per-language client implementation must conform to, plus a compliance checklist.
+No solution/project file to build, test, or lint — none exists, none should be added. Treat any change as a documentation/specification change.
 
-Do not look for a solution or project file to build, test, or lint — none exists, and none should be added. Treat any change here as a documentation/specification change.
+## Editing Conventions
 
-## Editing conventions
+- Each protocol concept: same shape — rules list, representative wire-format example, compliance-checklist entries. Match this shape for new sections.
+- Keep normative language (must/should/may) precise — other repos' clients are generated or hand-written directly against this wording.
+- Call out breaking vs. additive changes explicitly when changing accepted wire formats, required fields, or handshake/auth sequencing — downstream impact on every implementing client.
 
-- Each protocol concept is documented with the same shape: a rules list, a representative wire-format example, and compliance-checklist entries. Match that shape for new sections.
-- Keep normative language (must/should/may) precise — client implementations in other repos are generated or hand-written directly against this wording.
-- Changing accepted wire formats, required fields, or handshake/auth sequencing here has downstream impact on every implementing client; call out breaking vs. additive changes explicitly in the change description.
+## Change Tracking
 
-## Change tracking
-
-A changelog follows a standard keep-a-changelog shape with an unreleased section. Update it alongside any substantive spec change.
+Keep-a-changelog shape with an unreleased section — update alongside any substantive spec change.

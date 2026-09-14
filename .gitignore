@@ -17,7 +17,9 @@ Desktop.ini
 *~
 
 # Local agent/tool state
-.claude/
+.claude/*
+!.claude/rules/
+!.claude/rules/**
 .codex/
 
 # Environment and local configuration
