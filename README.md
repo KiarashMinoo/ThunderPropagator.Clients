@@ -8,6 +8,8 @@ Future-ready technology for a world where data needs to arrive at the right plac
 
 With ThunderPropagator, from stock and financial feeds to audio, news, video, and other content, it's all there fast enough to keep up with today's Internet. It provides bi-directional communication over advanced protocols and supports multiple message broker implementations. With LicenseManager, it makes it possible to protect, manage, and profit from your most valuable software development assets while innovating at the edge of tomorrow.
 
+[![Architecture diagram](https://gitdiagram.com/diagram-badge.svg)](https://gitdiagram.com/kiarashminoo/ThunderPropagator.Clients?utm_source=readme&utm_medium=badge)
+
 ## Key capabilities
 
 - **Transport negotiation:** selects WebSocket, QUIC, or IDS fallback while preserving a consistent client contract.
